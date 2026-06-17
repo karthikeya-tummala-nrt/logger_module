@@ -5,6 +5,15 @@ import 'formatter.dart';
 class JsonFormatter implements LogFormatter {
   @override
   String format(LogRecord record) {
-    return jsonEncode(record.toJson());
+    return jsonEncode(
+      record.toJson(),
+      toEncodable: (dynamic object) {
+        try {
+          return object.toJson();
+        } catch (_) {
+          return object.toString();
+        }
+      },
+    );
   }
 }
