@@ -4,7 +4,7 @@ import 'package:logger_module/logger_module.dart';
 void main() async {
   print('--- Logger Initialization ---');
   final logDir = '${Directory.current.path}/logs';
-  
+
   await Logger.init(
     level: LogLevel.verbose,
     sinks: [
@@ -17,40 +17,84 @@ void main() async {
     ],
   );
 
-  print('--- Testing Levels and Filtering ---');
-  Logger.verbose('This is a verbose message', tag: 'Test');
-  Logger.debug('This is a debug message', tag: 'Test');
-  Logger.info('This is an info message', tag: 'Test');
-  Logger.warn('This is a warning', tag: 'Test');
-  Logger.error('This is an error', tag: 'Test', error: Exception('Something went wrong'));
+  // ──────────────────────────────────────────────────────────
+  // 2. UNTAGGED logger — general-purpose logging.
+  // ──────────────────────────────────────────────────────────
+  final logger = Logger();
+  logger.info('Application started');
+  logger.debug('Running in debug mode');
 
-  print('--- Testing Metadata and StackTrace ---');
+  // ──────────────────────────────────────────────────────────
+  // 3. TAGGED loggers — ready for dependency injection.
+  //    Each instance auto-tags every log message.
+  //
+  //    In a real project you would register these in your DI
+  //    container (e.g. GetIt) and inject them into your
+  //    repositories / managers:
+  //
+  //      getIt.registerSingleton<Logger>(Logger('HEALTH'));
+  //      getIt.registerSingleton<Logger>(Logger('COMM'), instanceName: 'comm');
+  //
+  // ──────────────────────────────────────────────────────────
+  final healthLogger = Logger('HEALTH');
+  final commLogger   = Logger('COMM_MANAGER');
+
+  healthLogger.info('Heartbeat signal received');
+  healthLogger.warn('Heart rate elevated');
+
+  commLogger.info('CAN bus connection established');
+  commLogger.debug('Sending frame 0x1A2');
+
+  // ──────────────────────────────────────────────────────────
+  // 4. Error logging with error objects and stack traces.
+  // ──────────────────────────────────────────────────────────
   try {
-    throw StateError('Invalid state');
+    throw StateError('CAN bus write timeout');
   } catch (e, s) {
-    Logger.error('Caught error', tag: 'Lifecycle', error: e, stackTrace: s, metadata: {'id': 123});
+    commLogger.error('Failed to write to CAN bus', error: e, stackTrace: s);
   }
 
-  print('--- Testing Rotation (Logging 100 messages) ---');
-  for (var i = 0; i < 100; i++) {
-    Logger.info('Filling log file with message #$i to trigger rotation', tag: 'Spam');
+  // ──────────────────────────────────────────────────────────
+  // 5. Per-call tag override — the instance tag can be
+  //    overridden for a specific call if needed.
+  // ──────────────────────────────────────────────────────────
+  healthLogger.info('System-wide shutdown initiated', tag: 'SYSTEM');
+
+  // ──────────────────────────────────────────────────────────
+  // 6. Metadata support for structured context.
+  // ──────────────────────────────────────────────────────────
+  commLogger.warn(
+    'Packet loss detected',
+    metadata: {'lossRate': 0.12, 'interface': 'CAN0'},
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // 7. File rotation test — write enough to trigger rotation.
+  // ──────────────────────────────────────────────────────────
+  final spamLogger = Logger('ROTATION_TEST');
+  for (var i = 0; i < 50; i++) {
+    spamLogger.info('Filling log file with message #$i to trigger rotation');
   }
 
-  // Wait a bit for the isolate to process logs
+  // Give the background isolate time to flush
   await Future.delayed(Duration(seconds: 2));
 
-  print('--- Checking Log Directory ---');
+  // ──────────────────────────────────────────────────────────
+  // 8. Verify log files were created.
+  // ──────────────────────────────────────────────────────────
+  print('\n--- Log Directory Contents ---');
   final dir = Directory(logDir);
   if (dir.existsSync()) {
-    final files = dir.listSync();
+    final files = dir.listSync()..sort((a, b) => a.path.compareTo(b.path));
     print('Found ${files.length} log files:');
     for (var file in files) {
-      print(' - ${file.path} (${(file as File).lengthSync()} bytes)');
+      print('  ${file.uri.pathSegments.last} (${(file as File).lengthSync()} bytes)');
     }
   }
 
-  print('--- Disposing Logger ---');
+  // ──────────────────────────────────────────────────────────
+  // 9. Clean shutdown.
+  // ──────────────────────────────────────────────────────────
   await Logger.dispose();
-  
-  print('--- Verification Done ---');
+  print('\n--- Done ---');
 }
