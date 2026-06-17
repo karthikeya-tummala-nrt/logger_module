@@ -9,16 +9,19 @@ class FileSink extends LogSink {
   late int _currentIndex;
   File? _currentFile;
   int _currentFileSize = 0;
+  bool _initialized = false;
 
   FileSink({
     required super.formatter,
     required this.basePath,
     this.maxFileSizeInBytes = 5 * 1024 * 1024, // 5MB default
-  }) {
-    _init();
-  }
+  });
 
-  void _init() {
+  /// Lazily initializes on first write, ensuring all file I/O runs
+  /// on the background Isolate (where write() is called) — never on Main.
+  void _ensureInitialized() {
+    if (_initialized) return;
+
     final dir = Directory(basePath);
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);
@@ -26,6 +29,7 @@ class FileSink extends LogSink {
 
     _currentIndex = _findLatestIndex();
     _openCurrentFile();
+    _initialized = true;
   }
 
   int _findLatestIndex() {
@@ -75,6 +79,8 @@ class FileSink extends LogSink {
 
   @override
   void write(LogRecord record) {
+    _ensureInitialized();
+
     final formatted = formatter.format(record) + '\n';
     final bytes = formatted.length; // Approximate for UTF-8 strings
 
@@ -93,7 +99,7 @@ class FileSink extends LogSink {
 
   @override
   void dispose() {
-    // No explicit close needed for writeAsStringSync, but good to null out
     _currentFile = null;
+    _initialized = false;
   }
 }
