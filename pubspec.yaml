@@ -1,0 +1,7 @@
+name: logger_module
+description: A high-performance, non-blocking logger for Dart using background isolates.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.0.0
